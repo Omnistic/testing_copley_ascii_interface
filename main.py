@@ -3,6 +3,7 @@ import time
 
 class CopleyDrive:
     def __init__(self, port='COM3', baudrate=9600):
+        self.counts_per_revolution = 1331200 # Not sure how to not hardcode this, currently there are 650 lines in quadrature that's 2600 counts with 512 interpolation, so 2600 * 512 = 1331200 counts per revolution
         self.ser = serial.Serial(port, baudrate=baudrate, timeout=2)
         time.sleep(0.1)
         self.ser.send_break(duration=0.1)
@@ -37,11 +38,21 @@ class CopleyDrive:
     def abort_move(self):
         return self.send_command('t 0')
 
-    def move_to_absolute(self, counts):
+    def count_to_degrees(self, counts):
+        return (counts / self.counts_per_revolution) * 360
+
+    def degrees_to_count(self, degrees):
+        return int((degrees / 360) * self.counts_per_revolution)
+
+    def move_to_absolute(self, angle_degrees):
+        counts = self.degrees_to_count(angle_degrees)
+        max_velocity_rpm = 10
+        max_velocity = 0.1 * (max_velocity_rpm / 60) * self.counts_per_revolution
+        # From ASCII Command Examples (16-127081rev00)
         drive.set_parameter('0x24', '21')        # (?) Drive operating mode: 21 = Servo mode, the position loop is driven by the trajectory generator, DIFFERENT than for homing? (?)
         drive.set_parameter('0xc8', '0')         # Absolute Move, Trapezoidal Profile
         drive.set_parameter('0xca', str(counts)) # Target Position [counts]
-        drive.set_parameter('0xcb', '10000000')  # Maximum Velocity [0.1 counts/s]
+        drive.set_parameter('0xcb', str(max_velocity))  # Maximum Velocity [0.1 counts/s]
         drive.set_parameter('0xcc', '500000')    # Maximum Acceleration [10 counts/s^2]
         drive.set_parameter('0xcd', '500000')    # Maximum Deceleration [10 counts/s^2]
         return drive.send_command('t 1')         # Trajectory Update
@@ -49,7 +60,10 @@ class CopleyDrive:
     def close(self):
         self.ser.close()
 
-# Usage
-drive = CopleyDrive('COM3')
-# print(drive.home())
-print(drive.move_to_absolute(200000))
+if __name__ == "__main__":
+    drive = CopleyDrive('COM3')
+
+    # print(drive.home())
+    print(drive.move_to_absolute(0))
+
+    drive.close()
